@@ -4,7 +4,7 @@ use sdl2::{self, pixels, rect::Rect};
 pub const SCREEN_WIDTH: usize = 64;
 pub const SCREEN_HEIGHT: usize = 32;
 
-const SCALE_FACTOR: usize = 15;
+const SCALE_FACTOR: usize = 20;
 
 pub struct Video {
     draw: bool,
@@ -55,7 +55,8 @@ impl Video {
         (x, y)
     }
 
-	// we could try with 2d array as screen
+    // TODO there are some issues in this one
+	// we could possibly try with 2d array as screen
     pub fn draw_screen(&mut self) {
         self.canvas.clear();
         for i in 0..self.screen.len() {
