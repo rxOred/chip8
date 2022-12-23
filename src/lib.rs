@@ -4,6 +4,7 @@ use std::io::Read;
 
 mod drivers;
 
+const CYCLES_PER_FRAME: usize = 10;
 const FONTSET_SIZE: usize = 0x50;
 const START_ADDRESS: usize = 0x200;
 
@@ -111,9 +112,11 @@ impl Chip8 {
 
     pub fn emulate_cycle(&mut self) {
         self.media.keypad.poll();
-        let opcode = self.fetch_instr();
-        if let Some(opcode) = opcode {
-            self.execute_instr(opcode);
+        for _ in 0..CYCLES_PER_FRAME {
+            let opcode = self.fetch_instr();
+            if let Some(opcode) = opcode {
+                self.execute_instr(opcode);
+            }
         }
         self.update_timers();
     }
@@ -139,9 +142,8 @@ impl Chip8 {
                     0x00e0 => self.media.display.clear_screen(),
                     0x00ee => {
                         // return from subroutine
+                        self.cpu.sp -= 1; 
                         self.cpu.pc = self.memory.stack[(self.cpu.sp) as usize];
-                        self.memory.stack[(self.cpu.sp) as usize] = 0x0;
-                        self.cpu.sp -= 1;
                     }
                     _ => {}
                 }
@@ -182,9 +184,7 @@ impl Chip8 {
             }
             0x7000 => {
                 // set Vx = Vx + NN
-                let result =
-                    self.cpu.v[((opcode & 0x0f00) >> 8) as usize] as u16 + (opcode & 0x00ff) as u16;
-                self.cpu.v[((opcode & 0x0f00) >> 8) as usize] = result as u8;
+                self.cpu.v[((opcode & 0x0f00) >> 8) as usize] = self.cpu.v[((opcode & 0x0f00) >> 8) as usize].wrapping_add((opcode & 0x00ff) as u8);
             }
             0x8000 => {
                 match opcode & 0x800f {
@@ -210,28 +210,23 @@ impl Chip8 {
                     }
                     0x8004 => {
                         // Vx = Vx + Vy ; if carry then v[f] = 1; else v[f] = 0;
-                        let result: u16 = (self.cpu.v[((opcode & 0x0f00) >> 8) as usize]
-                            + self.cpu.v[((opcode & 0x00f0) >> 4) as usize])
-                            as u16;
-                        self.cpu.v[((opcode & 0x0f00) >> 8) as usize] = result as u8;
-                        if result > 0xff {
+                        let (result, carry) = self.cpu.v[((opcode & 0x0f00) >> 8) as usize].overflowing_add(self.cpu.v[((opcode & 0x00f0) >> 4) as usize]);
+                        if carry {
                             self.cpu.v[0xf] = 1;
                         } else {
                             self.cpu.v[0xf] = 0;
                         }
+                        self.cpu.v[((opcode & 0x0f00) >> 8) as usize] = result;
                     }
                     0x8005 => {
                         // Vx = Vx - Vy ; if borrow then v[f] = 1; else v[f] = 0;
-                        if self.cpu.v[((opcode & 0x0f00) >> 8) as usize]
-                            > self.cpu.v[((opcode & 0x00f0) >> 4) as usize]
-                        {
+                        let (result, borrow) = self.cpu.v[((opcode & 0x0f00) >> 8) as usize].overflowing_sub(self.cpu.v[((opcode & 0x00f0) >> 8) as usize]);
+                        if borrow {
                             self.cpu.v[0xf] = 1;
                         } else {
                             self.cpu.v[0xf] = 0;
                         }
-                        self.cpu.v[((opcode & 0x0f00) >> 8) as usize] = self.cpu.v
-                            [((opcode & 0x0f00) >> 8) as usize]
-                            .wrapping_sub(self.cpu.v[((opcode & 0x00f0) >> 4) as usize]);
+                        self.cpu.v[((opcode & 0x0f00) >> 8) as usize] = result; 
                     }
                     0x8006 => {
                         // set Vx >>= 1
@@ -239,21 +234,19 @@ impl Chip8 {
                         self.cpu.v[((opcode & 0x0f00) >> 8) as usize] >>= 1;
                     }
                     0x8007 => {
-                        if self.cpu.v[((opcode & 0x00f0) >> 4) as usize]
-                            > self.cpu.v[((opcode & 0x0f00) >> 8) as usize]
-                        {
+                        // set Vx = Vy - Vx; if carry v[f] = 1; else v[f] = 0
+                        let (result, borrow) = self.cpu.v[((opcode & 0x00f0) >> 4) as usize].overflowing_sub(self.cpu.v[((opcode & 0x0f00) >> 8) as usize]);
+                        if borrow {
                             self.cpu.v[0xf] = 1;
                         } else {
                             self.cpu.v[0xf] = 0;
                         }
-                        self.cpu.v[((opcode & 0x0f00) >> 8) as usize] = self.cpu.v
-                            [((opcode & 0x00f0) >> 4) as usize]
-                            .wrapping_sub(self.cpu.v[((opcode & 0x0f00) >> 8) as usize]);
-                    }
+                        self.cpu.v[((opcode & 0x0f00) >> 8) as usize] = result;
+                   }
                     0x800e => {
                         // set Vx <<= 1
                         self.cpu.v[0xf] =
-                            (self.cpu.v[((opcode & 0x0f00) >> 8) as usize] & 0b1000000) >> 7;
+                            (self.cpu.v[((opcode & 0x0f00) >> 8) as usize] >> 7) & 1;
                         self.cpu.v[((opcode & 0x0f00) >> 8) as usize] <<= 1;
                     }
                     _ => {}
@@ -282,13 +275,14 @@ impl Chip8 {
                     rng.gen::<u8>() & ((opcode & 0x00ff) as u8);
             }
             0xd000 => {
+                // TODO maybe something wrong with this 
                 // draw sprite
                 // Vx and Vy specifies coordinates which the sprite should be drawn
                 // Even though the width of a sprite is set to 8bits, height is specified in the N
                 // so total bits we will be reading is N * 8
                 let x_coord = self.cpu.v[((opcode & 0x0f00) >> 8) as usize];
                 let y_coord = self.cpu.v[((opcode & 0x00f0) >> 4) as usize];
-                let height = (opcode & 0x000f) as u8; // height
+                let height = (opcode & 0x000f) as u8;
                 self.cpu.v[0xf] = 0;
                 // loop through each row of the sprite
                 for yline in 0..height {
@@ -366,11 +360,11 @@ impl Chip8 {
                         self.timers.sound = self.cpu.v[((opcode & 0x0f00) >> 8) as usize];
                     }
                     0xf01e => {
-                        self.cpu.index += self.cpu.v[((opcode & 0x0f00) >> 8) as usize] as u16;
+                        self.cpu.index = self.cpu.index.wrapping_add(self.cpu.v[((opcode & 0x0f00) >> 8) as usize] as u16);
                     }
                     0xf029 => {
                         // set index register to the location of a sprite
-                        self.cpu.index = self.cpu.v[((opcode & 0x0f00) >> 8) as usize] as u16;
+                        self.cpu.index = self.cpu.v[((opcode & 0x0f00) >> 8) as usize] as u16 * 5;
                     }
                     0xf033 => {
                         // convert to BCD
@@ -385,7 +379,7 @@ impl Chip8 {
                     }
                     0xf055 => {
                         // store regs until n in memory start by address in index register
-                        let n = self.cpu.v[((opcode & 0x0f00) >> 8) as usize];
+                        let n = ((opcode & 0x0f00) >> 8) as usize;
                         for i in 0..=n {
                             self.memory.memory[(self.cpu.index as usize + i as usize)] =
                                 self.cpu.v[(i) as usize];
@@ -393,7 +387,7 @@ impl Chip8 {
                     }
                     0xf065 => {
                         // load to regs until n from memory start by address in index register
-                        let n = self.cpu.v[((opcode & 0x0f00) >> 8) as usize];
+                        let n = ((opcode & 0x0f00) >> 8) as usize;
                         for i in 0..=n {
                             self.cpu.v[(i) as usize] =
                                 self.memory.memory[self.cpu.index as usize + i as usize];

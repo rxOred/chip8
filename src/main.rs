@@ -16,8 +16,8 @@ fn main() {
 
     loop {
         chip8.emulate_cycle();
-        if chip8.is_drawflag_set() {
-            chip8.media.display.draw_screen();
-        }
+        //if chip8.is_drawflag_set() {
+        chip8.media.display.draw_screen();
+        //}
     }
 }
