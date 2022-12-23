@@ -55,7 +55,7 @@ impl Video {
         (x, y)
     }
 
-	// we could try with 2d array as screen
+    // we could try with 2d array as screen
     pub fn draw_screen(&mut self) {
         self.canvas.clear();
         for i in 0..self.screen.len() {

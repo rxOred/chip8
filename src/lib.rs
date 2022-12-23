@@ -142,7 +142,7 @@ impl Chip8 {
                     0x00e0 => self.media.display.clear_screen(),
                     0x00ee => {
                         // return from subroutine
-                        self.cpu.sp -= 1; 
+                        self.cpu.sp -= 1;
                         self.cpu.pc = self.memory.stack[(self.cpu.sp) as usize];
                     }
                     _ => {}
@@ -184,7 +184,9 @@ impl Chip8 {
             }
             0x7000 => {
                 // set Vx = Vx + NN
-                self.cpu.v[((opcode & 0x0f00) >> 8) as usize] = self.cpu.v[((opcode & 0x0f00) >> 8) as usize].wrapping_add((opcode & 0x00ff) as u8);
+                self.cpu.v[((opcode & 0x0f00) >> 8) as usize] = self.cpu.v
+                    [((opcode & 0x0f00) >> 8) as usize]
+                    .wrapping_add((opcode & 0x00ff) as u8);
             }
             0x8000 => {
                 match opcode & 0x800f {
@@ -210,7 +212,8 @@ impl Chip8 {
                     }
                     0x8004 => {
                         // Vx = Vx + Vy ; if carry then v[f] = 1; else v[f] = 0;
-                        let (result, carry) = self.cpu.v[((opcode & 0x0f00) >> 8) as usize].overflowing_add(self.cpu.v[((opcode & 0x00f0) >> 4) as usize]);
+                        let (result, carry) = self.cpu.v[((opcode & 0x0f00) >> 8) as usize]
+                            .overflowing_add(self.cpu.v[((opcode & 0x00f0) >> 4) as usize]);
                         if carry {
                             self.cpu.v[0xf] = 1;
                         } else {
@@ -220,13 +223,14 @@ impl Chip8 {
                     }
                     0x8005 => {
                         // Vx = Vx - Vy ; if borrow then v[f] = 1; else v[f] = 0;
-                        let (result, borrow) = self.cpu.v[((opcode & 0x0f00) >> 8) as usize].overflowing_sub(self.cpu.v[((opcode & 0x00f0) >> 8) as usize]);
+                        let (result, borrow) = self.cpu.v[((opcode & 0x0f00) >> 8) as usize]
+                            .overflowing_sub(self.cpu.v[((opcode & 0x00f0) >> 8) as usize]);
                         if borrow {
                             self.cpu.v[0xf] = 1;
                         } else {
                             self.cpu.v[0xf] = 0;
                         }
-                        self.cpu.v[((opcode & 0x0f00) >> 8) as usize] = result; 
+                        self.cpu.v[((opcode & 0x0f00) >> 8) as usize] = result;
                     }
                     0x8006 => {
                         // set Vx >>= 1
@@ -235,18 +239,18 @@ impl Chip8 {
                     }
                     0x8007 => {
                         // set Vx = Vy - Vx; if carry v[f] = 1; else v[f] = 0
-                        let (result, borrow) = self.cpu.v[((opcode & 0x00f0) >> 4) as usize].overflowing_sub(self.cpu.v[((opcode & 0x0f00) >> 8) as usize]);
+                        let (result, borrow) = self.cpu.v[((opcode & 0x00f0) >> 4) as usize]
+                            .overflowing_sub(self.cpu.v[((opcode & 0x0f00) >> 8) as usize]);
                         if borrow {
                             self.cpu.v[0xf] = 1;
                         } else {
                             self.cpu.v[0xf] = 0;
                         }
                         self.cpu.v[((opcode & 0x0f00) >> 8) as usize] = result;
-                   }
+                    }
                     0x800e => {
                         // set Vx <<= 1
-                        self.cpu.v[0xf] =
-                            (self.cpu.v[((opcode & 0x0f00) >> 8) as usize] >> 7) & 1;
+                        self.cpu.v[0xf] = (self.cpu.v[((opcode & 0x0f00) >> 8) as usize] >> 7) & 1;
                         self.cpu.v[((opcode & 0x0f00) >> 8) as usize] <<= 1;
                     }
                     _ => {}
@@ -275,7 +279,7 @@ impl Chip8 {
                     rng.gen::<u8>() & ((opcode & 0x00ff) as u8);
             }
             0xd000 => {
-                // TODO maybe something wrong with this 
+                // TODO maybe something wrong with this
                 // draw sprite
                 // Vx and Vy specifies coordinates which the sprite should be drawn
                 // Even though the width of a sprite is set to 8bits, height is specified in the N
@@ -360,7 +364,10 @@ impl Chip8 {
                         self.timers.sound = self.cpu.v[((opcode & 0x0f00) >> 8) as usize];
                     }
                     0xf01e => {
-                        self.cpu.index = self.cpu.index.wrapping_add(self.cpu.v[((opcode & 0x0f00) >> 8) as usize] as u16);
+                        self.cpu.index = self
+                            .cpu
+                            .index
+                            .wrapping_add(self.cpu.v[((opcode & 0x0f00) >> 8) as usize] as u16);
                     }
                     0xf029 => {
                         // set index register to the location of a sprite
