@@ -4,7 +4,10 @@ use std::io::Read;
 
 mod drivers;
 
-const CYCLES_PER_FRAME: usize = 10;
+pub const SCREEN_WIDTH: usize = 64;
+pub const SCREEN_HEIGHT: usize = 32;
+
+const CYCLES_PER_FRAME: usize = 30;
 const FONTSET_SIZE: usize = 0x50;
 const START_ADDRESS: usize = 0x200;
 
@@ -112,13 +115,15 @@ impl Chip8 {
 
     pub fn emulate_cycle(&mut self) {
         self.media.keypad.poll();
-        for _ in 0..CYCLES_PER_FRAME {
-            let opcode = self.fetch_instr();
-            if let Some(opcode) = opcode {
-                self.execute_instr(opcode);
-            }
+        std::thread::sleep(std::time::Duration::from_micros(600));
+        let opcode = self.fetch_instr();
+        if let Some(opcode) = opcode {
+            self.execute_instr(opcode);
         }
         self.update_timers();
+        if self.is_drawflag_set() {
+            self.media.display.draw_screen();
+        }
     }
 
     pub fn is_drawflag_set(&mut self) -> bool {
@@ -138,7 +143,7 @@ impl Chip8 {
     fn execute_instr(&mut self, opcode: u16) {
         match opcode & 0xf000 {
             0x0000 => {
-                match opcode & 0x00ff {
+                match opcode & 0xf0ff {
                     0x00e0 => self.media.display.clear_screen(),
                     0x00ee => {
                         // return from subroutine
@@ -166,7 +171,7 @@ impl Chip8 {
             }
             0x4000 => {
                 // skip next instruction if Vx != NN
-                if self.cpu.v[((opcode & 0x0f00) >> 8) as usize] != (opcode & 0x00fff) as u8 {
+                if self.cpu.v[((opcode & 0x0f00) >> 8) as usize] != (opcode & 0x00ff) as u8 {
                     self.cpu.pc += 2;
                 }
             }
@@ -189,7 +194,7 @@ impl Chip8 {
                     .wrapping_add((opcode & 0x00ff) as u8);
             }
             0x8000 => {
-                match opcode & 0x800f {
+                match opcode & 0xf00f {
                     0x8000 => {
                         // set Vx = Vy
                         self.cpu.v[((opcode & 0x0f00) >> 8) as usize] =
@@ -224,7 +229,7 @@ impl Chip8 {
                     0x8005 => {
                         // Vx = Vx - Vy ; if borrow then v[f] = 1; else v[f] = 0;
                         let (result, borrow) = self.cpu.v[((opcode & 0x0f00) >> 8) as usize]
-                            .overflowing_sub(self.cpu.v[((opcode & 0x00f0) >> 8) as usize]);
+                            .overflowing_sub(self.cpu.v[((opcode & 0x00f0) >> 4) as usize]);
                         if borrow {
                             self.cpu.v[0xf] = 1;
                         } else {
@@ -265,7 +270,7 @@ impl Chip8 {
                 }
             }
             0xa000 => {
-                // cpu.i = 0xaNNN
+                // cpu.i = 0x0NNN
                 self.cpu.index = opcode & 0x0fff;
             }
             0xb000 => {
@@ -274,9 +279,8 @@ impl Chip8 {
             }
             0xc000 => {
                 // generate random number and and it with nn
-                let mut rng = rand::thread_rng();
-                self.cpu.v[((opcode & 0x0f00) >> 8) as usize] =
-                    rng.gen::<u8>() & ((opcode & 0x00ff) as u8);
+                let rng: u8 = rand::thread_rng().gen();
+                self.cpu.v[((opcode & 0x0f00) >> 8) as usize] = rng & ((opcode & 0x00ff) as u8);
             }
             0xd000 => {
                 // TODO maybe something wrong with this
@@ -284,9 +288,9 @@ impl Chip8 {
                 // Vx and Vy specifies coordinates which the sprite should be drawn
                 // Even though the width of a sprite is set to 8bits, height is specified in the N
                 // so total bits we will be reading is N * 8
-                let x_coord = self.cpu.v[((opcode & 0x0f00) >> 8) as usize];
-                let y_coord = self.cpu.v[((opcode & 0x00f0) >> 4) as usize];
-                let height = (opcode & 0x000f) as u8;
+                let x_coord = self.cpu.v[((opcode & 0x0f00) >> 8) as usize] as u16;
+                let y_coord = self.cpu.v[((opcode & 0x00f0) >> 4) as usize] as u16;
+                let height = opcode & 0x000f;
                 self.cpu.v[0xf] = 0;
                 // loop through each row of the sprite
                 for yline in 0..height {
@@ -296,25 +300,25 @@ impl Chip8 {
                     for xline in 0..8 {
                         // if the bit is in memory and corresponding pixel is not 0, we set v[0xf]
                         // = 1
-                        if (pixels & (0b1000000 >> xline)) != 0 {
+                        if (pixels & (0b1000_0000 >> xline)) != 0 {
+                            let x = (x_coord + xline) as usize % SCREEN_WIDTH;
+                            let y = (y_coord + yline) as usize % SCREEN_HEIGHT;
                             if self
                                 .media
                                 .display
-                                .get_screen_pixel_state(x_coord + xline, y_coord + yline)
+                                .get_screen_pixel_state(x as usize, y as usize)
                             {
                                 self.cpu.v[0xf] = 1;
                             }
-                            self.media.display.set_screen_pixel_state(
-                                x_coord + xline,
-                                y_coord,
-                                true,
-                            )
+                            self.media
+                                .display
+                                .set_screen_pixel_state(x as usize, y as usize, true)
                         }
                     }
                 }
                 self.media.display.set_drawflag(true);
             }
-            0xe000 => match opcode & 0xe0ff {
+            0xe000 => match opcode & 0xf0ff {
                 0xe09e => {
                     // skip instruction if key index in Vx is pressed
                     let key_index = self.cpu.v[((opcode & 0x0f00) >> 8) as usize];
@@ -345,9 +349,9 @@ impl Chip8 {
                         // the cpu to execute key pressed opcode in case of a key press and update
                         // keypad states
                         let mut key_pressed = false;
-                        for key_index in 0..16 {
+                        for key_index in 0..self.media.keypad.get_keypad_len() {
                             if self.media.keypad.is_key_pressed(key_index) {
-                                self.cpu.v[((opcode & 0x0f00) >> 4) as usize] = key_index as u8;
+                                self.cpu.v[((opcode & 0x0f00) >> 8) as usize] = key_index as u8;
                                 key_pressed = true;
                                 break;
                             }
@@ -388,16 +392,14 @@ impl Chip8 {
                         // store regs until n in memory start by address in index register
                         let n = ((opcode & 0x0f00) >> 8) as usize;
                         for i in 0..=n {
-                            self.memory.memory[(self.cpu.index as usize + i as usize)] =
-                                self.cpu.v[(i) as usize];
+                            self.memory.memory[self.cpu.index as usize + i] = self.cpu.v[i];
                         }
                     }
                     0xf065 => {
                         // load to regs until n from memory start by address in index register
                         let n = ((opcode & 0x0f00) >> 8) as usize;
                         for i in 0..=n {
-                            self.cpu.v[(i) as usize] =
-                                self.memory.memory[self.cpu.index as usize + i as usize];
+                            self.cpu.v[i] = self.memory.memory[self.cpu.index as usize + i];
                         }
                     }
                     _ => {}

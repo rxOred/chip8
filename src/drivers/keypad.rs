@@ -14,6 +14,10 @@ impl Keypad {
         }
     }
 
+    pub fn get_keypad_len(&mut self) -> usize {
+        self.keypad.len()
+    }
+
     pub fn is_key_pressed(&mut self, index: usize) -> bool {
         self.keypad[index]
     }

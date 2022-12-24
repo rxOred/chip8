@@ -40,12 +40,12 @@ impl Video {
     }
 
     // calculate index of a pixel in screen array given x and y coordinates
-    fn calculate_index(x: u8, y: u8) -> usize {
+    fn calculate_index(x: usize, y: usize) -> usize {
         // we multiply by SCREEN_WIDTH because eventhough data is represented by 8bit rows in
         // memory, in screen it should be 64
-        let x_coord = x as usize % SCREEN_WIDTH;
-        let y_coord = y as usize % SCREEN_HEIGHT;
-        y_coord as usize * SCREEN_WIDTH + x_coord
+        let x = x % SCREEN_WIDTH;
+        let y = y % SCREEN_HEIGHT;
+        x + SCREEN_WIDTH * y
     }
 
     // calculate x and y coordinates of canvas given index
@@ -57,21 +57,21 @@ impl Video {
 
     // we could try with 2d array as screen
     pub fn draw_screen(&mut self) {
+        self.canvas.set_draw_color(pixels::Color::RGB(0, 0, 0));
         self.canvas.clear();
+
+        self.canvas.set_draw_color(pixels::Color::RGB(0, 255, 0));
         for i in 0..self.screen.len() {
             if self.screen[i] {
-                self.canvas.set_draw_color(pixels::Color::RGB(0, 255, 0));
-            } else {
-                self.canvas.set_draw_color(pixels::Color::RGB(0, 0, 0));
+                let (x, y) = Video::calculate_coordinates(i);
+                let rect = Rect::new(
+                    (x * SCALE_FACTOR) as i32,
+                    (y * SCALE_FACTOR) as i32,
+                    SCALE_FACTOR as u32,
+                    SCALE_FACTOR as u32,
+                );
+                let _ = self.canvas.fill_rect(rect);
             }
-            let (x, y) = Video::calculate_coordinates(i);
-            let rect = Rect::new(
-                (x * SCALE_FACTOR) as i32,
-                (y * SCALE_FACTOR) as i32,
-                SCALE_FACTOR as u32,
-                SCALE_FACTOR as u32,
-            );
-            let _ = self.canvas.fill_rect(rect);
         }
         self.canvas.present();
         self.draw = false;
@@ -82,11 +82,11 @@ impl Video {
         self.draw_screen();
     }
 
-    pub fn get_screen_pixel_state(&mut self, x: u8, y: u8) -> bool {
+    pub fn get_screen_pixel_state(&mut self, x: usize, y: usize) -> bool {
         self.screen[Video::calculate_index(x, y)]
     }
 
-    pub fn set_screen_pixel_state(&mut self, x: u8, y: u8, state: bool) {
+    pub fn set_screen_pixel_state(&mut self, x: usize, y: usize, state: bool) {
         self.screen[Video::calculate_index(x, y)] ^= state;
     }
 
