@@ -7,7 +7,6 @@ mod drivers;
 pub const SCREEN_WIDTH: usize = 64;
 pub const SCREEN_HEIGHT: usize = 32;
 
-const CYCLES_PER_FRAME: usize = 30;
 const FONTSET_SIZE: usize = 0x50;
 const START_ADDRESS: usize = 0x200;
 
@@ -42,7 +41,7 @@ struct Timers {
 }
 
 pub struct Media {
-    pub sound: i32, // TODO
+    pub sound: drivers::Audio, 
 
     // display of the chip8 is 2048 pixels, each pixel can be either black or white
     pub display: drivers::Video,
@@ -76,7 +75,7 @@ impl Chip8 {
                 sound: 0x0,
             },
             media: Media {
-                sound: 0x0,
+                sound: drivers::Audio::new(sdl_context), 
                 display: drivers::Video::new(sdl_context),
                 keypad: drivers::Keypad::new(sdl_context),
             },
@@ -415,8 +414,9 @@ impl Chip8 {
         }
         if self.timers.sound > 0 {
             if self.timers.sound == 1 {
-                println!("beep");
+                self.media.sound.beep();
             }
+            self.media.sound.beep_stop();
             self.timers.sound -= 1;
         }
     }
